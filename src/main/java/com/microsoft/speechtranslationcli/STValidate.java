@@ -63,7 +63,9 @@ public class STValidate {
         } else if (outputDir.isHidden()) {
             throw new ValidationException(outputDir.getAbsolutePath(), stringsCli.getString("StvValidationOutputDirIsHidden"), true);
         } else if (!outputDir.canRead()) {
-            throw new ValidationException(outputDir.getAbsolutePath(), stringsCli.getString("StvValidationOutputCannotRead"), false);
+            throw new ValidationException(outputDir.getAbsolutePath(), stringsCli.getString("StvValidationOutputDirCannotRead"), false);
+        } else if (!outputDir.isDirectory()) {
+            throw new ValidationException(outputDir.getAbsolutePath(), stringsCli.getString("StvValidationOutputDirIsNoDir"), true);
         }
     }
 
