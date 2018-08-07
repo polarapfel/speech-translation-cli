@@ -32,19 +32,67 @@ import picocli.CommandLine.Parameters;
 import java.io.File;
 import java.util.ResourceBundle;
 
+// TODO: implement input validation for picocli options and parameters
+
 @CommandLine.Command(name = "speechtranslate", mixinStandardHelpOptions = true, versionProvider = STManifestVersionProvider.class)
 public class STCli implements Runnable {
     private static final Logger classLogger = LogManager.getLogger(STCli.class);
     private static final STConfiguration configInstance = STConfiguration.getInstance();
     private static final ResourceBundle stringsCli = configInstance.getStringsCli();
 
+    /*
+     * TODO: Currently, picocli does not allow for ResourceBundle properties in its annotations, so all text literals are hard-coded :(
+     */
+
     @Option(names = { "-v", "--verbose" }, description = "Verbose mode. Helpful for troubleshooting. " +
             "Multiple -v options increase the verbosity.")
     private boolean[] verbose = new boolean[0];
 
+    @Option(names = "--from", description = "Specifies the language of the incoming speech.", required = true)
+    private String from;
+
+    @Option(names = "--to",
+            description = "Specifies the language to translate the transcribed text into.", required = true)
+    private String to;
+
+    @Option(names = "--output-dir", description = "Directory to which translated files will be written. " +
+            "The default is the current working directory.")
+    private String outputLocation = configInstance.getCurrentWorkingDirectory();
+
+    @Option(names = "--features", description = "Comma-separated set of features selected by the client. " +
+            "Available features include: TextToSpeech, Partial, TimingInfo", required = false)
+    private String features;
+
+    @Option(names = {"--voice"},
+            description = "Identifies what voice to use for text-to-speech rendering of the translated text. " +
+                    "The value is one of the voice identifiers from the tts scope in the response from the Languages API. " +
+                    "If a voice is not specified the system will automatically choose one when the text-to-speech " +
+                    "feature is enabled.", required = false)
+    private String voice;
+
+    @Option(names = "--audio",
+            description = "Specifies the format of the text-to-speech audio stream returned by the service. " +
+                    "Available options are: audio/wav, audio/mp3. Default is audio/wav.", required = false)
+    private String audio = "audio/wav";
+
+    @Option(names = "--profanity-action",
+            description = "Specifies how the service should handle profanities recognized in the speech. " +
+                    "Valid actions are: NoAction, Marked, Deleted.", required = false)
+    private String profanityAction = "Marked";
+
+    @Option(names = "--profanity-marker",
+            description = "Specifies how detected profanities are handled when ProfanityAction is set to Marked. " +
+                    "Valid options are: Asterisk, Tag. The default is Asterisk.", required = false)
+    private String profanityMarker = "Asterisk";
+
+    @Option(names = "--subscription-key",
+            description = "Cognitive Services Translator Speech API key", required = true)
+    private String subscriptionKey;
+
     @Parameters(arity = "1..*", paramLabel = "FILE", description = "WAV file(s) to translate.")
     private File[] inputFiles;
 
+    // TODO: add option to define output file suffix matching [^-_.A-Za-z0-9]
 
     public static void main(String[] args) {
         CommandLine.run(new STCli(), System.out, args);
@@ -64,5 +112,7 @@ public class STCli implements Runnable {
     @Override
     public void run() {
         classLogger.trace(stringsCli.getString("log4jMainTraceStart"));
+
+
     }
 }
