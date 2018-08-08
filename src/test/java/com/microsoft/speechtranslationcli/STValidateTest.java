@@ -23,30 +23,42 @@
  */
 package com.microsoft.speechtranslationcli;
 
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.Assumptions.*;
+
 /**
  *
  * @author Tobias Weisserth <tobias.weisserth@microsoft.com>
  */
-public enum STExitCode {
-    NORMAL(0, "Normal exit."),
-    CONFIGURATION_INIT_ERROR(1, "Configuration folder and file could not be initialized."),
-    CONFIGURATION_READ_ERROR(2, "Configuration file could not be read."),
-    VALIDATION_ERROR(3, "Command line parameter validation failed.");
+public class STValidateTest {
 
+    static final String validAudioExample = "audio/wav";
+    static final String invalidAudioExample = "audio/fake";
 
-    private final int id;
-    private final String msg;
-
-    STExitCode(int id, String msg) {
-        this.id = id;
-        this.msg = msg;
+    @BeforeAll
+    public static void setUpClass() {
     }
 
-    public int getId() {
-        return this.id;
+    @AfterAll
+    public static void tearDownClass() {
     }
 
-    public String getMsg() {
-        return this.msg;
+    @BeforeEach
+    public void setUp() {
+    }
+
+    @AfterEach
+    public void tearDown() {
+    }
+
+    @Test
+    void testAudioFormatValidation() {
+        try {
+            STValidate.validateAudioFormat(validAudioExample);
+        } catch (STValidationException e) {
+            fail("Valid option value failed validation.");
+        }
     }
 }

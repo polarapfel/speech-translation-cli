@@ -29,6 +29,7 @@ import picocli.CommandLine;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+import javax.xml.bind.ValidationEvent;
 import java.io.File;
 import java.util.ResourceBundle;
 
@@ -57,7 +58,7 @@ public class STCli implements Runnable {
 
     @Option(names = "--output-dir", description = "Directory to which translated files will be written. " +
             "The default is the current working directory.")
-    private String outputLocation = configInstance.getCurrentWorkingDirectory();
+    private File outputLocation = new File(configInstance.getCurrentWorkingDirectory());
 
     @Option(names = "--features", description = "Comma-separated set of features selected by the client. " +
             "Available features include: TextToSpeech, Partial, TimingInfo", required = false)
@@ -113,6 +114,26 @@ public class STCli implements Runnable {
     public void run() {
         classLogger.trace(stringsCli.getString("log4jMainTraceStart"));
 
+        // run validation on some of the input parameters and options
+        // TODO: write more validation code to cover all input
+
+        try {
+            STValidate.validateAudioFormat(audio);
+            if (features != null) STValidate.validateFeature(features);
+            STValidate.validateFiles(inputFiles);
+            STValidate.validateOutputDir(outputLocation);
+            STValidate.validateProfanityAction(profanityAction);
+            STValidate.validateProfanityMarker(profanityMarker);
+        } catch (STValidationException e) {
+            classLogger.debug(stringsCli.getString("StvValidationDebugValidationException"));
+            classLogger.debug(e.getMessage() + e.getOptionOrParameter(), e);
+            if (e.isFatal()) {
+                classLogger.fatal(e.getMessage() + e.getOptionOrParameter());
+                System.exit(STExitCode.VALIDATION_ERROR.getId());
+            } else {
+                classLogger.warn(e.getMessage() + e.getOptionOrParameter());
+            }
+        }
 
     }
 }

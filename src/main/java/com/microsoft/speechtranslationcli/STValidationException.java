@@ -23,30 +23,25 @@
  */
 package com.microsoft.speechtranslationcli;
 
-/**
- *
- * @author Tobias Weisserth <tobias.weisserth@microsoft.com>
- */
-public enum STExitCode {
-    NORMAL(0, "Normal exit."),
-    CONFIGURATION_INIT_ERROR(1, "Configuration folder and file could not be initialized."),
-    CONFIGURATION_READ_ERROR(2, "Configuration file could not be read."),
-    VALIDATION_ERROR(3, "Command line parameter validation failed.");
+public class STValidationException extends IllegalArgumentException {
+    private String optionOrParameter;
+    private boolean isFatal;
 
-
-    private final int id;
-    private final String msg;
-
-    STExitCode(int id, String msg) {
-        this.id = id;
-        this.msg = msg;
+    STValidationException(String optionOrParameter, String message, boolean isFatal) {
+        super(message);
+        this.optionOrParameter = optionOrParameter;
+        this.isFatal = isFatal;
     }
 
-    public int getId() {
-        return this.id;
+    STValidationException() {
+        super();
     }
 
-    public String getMsg() {
-        return this.msg;
+    public String getOptionOrParameter() {
+        return optionOrParameter;
+    }
+
+    public boolean isFatal() {
+        return isFatal;
     }
 }

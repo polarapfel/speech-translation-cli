@@ -23,6 +23,7 @@
  */
 package com.microsoft.speechtranslationcli;
 
+import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -37,118 +38,168 @@ public class STValidate {
     private static final STConfiguration configInstance = STConfiguration.getInstance();
     private static final ResourceBundle stringsCli = configInstance.getStringsCli();
 
-    public static void validateFiles(File[] inputFiles) throws ValidationException {
+    public static void validateFiles(File[] inputFiles) throws STValidationException {
         new ArrayList<File>(Arrays.asList(inputFiles)).forEach(new Consumer<File>() {
             public void accept(File file) {
                 if(!file.exists()){
-                    throw new ValidationException(file.getAbsolutePath(), stringsCli.getString("StvValidationFileDoesNotExist"), true);
+                    throw new STValidationException(file.getAbsolutePath(),
+                            stringsCli.getString("StvValidationFileDoesNotExist"), true);
                 } else if(!file.canRead()) {
-                    throw new ValidationException(file.getAbsolutePath(), stringsCli.getString("StvValidationFileCannotRead"), true);
+                    throw new STValidationException(file.getAbsolutePath(),
+                            stringsCli.getString("StvValidationFileCannotRead"), true);
                 } else if(file.isDirectory()) {
-                    throw new ValidationException(file.getAbsolutePath(), stringsCli.getString("StvValidationFileIsDirectory"), true);
+                    throw new STValidationException(file.getAbsolutePath(),
+                            stringsCli.getString("StvValidationFileIsDirectory"), true);
                 } else if(file.length() == 0) {
-                    throw new ValidationException(file.getAbsolutePath(), stringsCli.getString("StvValidationFileLengthZero"), true);
+                    throw new STValidationException(file.getAbsolutePath(),
+                            stringsCli.getString("StvValidationFileLengthZero"), true);
                 } else if(file.isHidden()) {
-                    throw new ValidationException(file.getAbsolutePath(), stringsCli.getString("StvValidationFileIsHidden"), true);
+                    throw new STValidationException(file.getAbsolutePath(),
+                            stringsCli.getString("StvValidationFileIsHidden"), true);
                 }
             }
         });
     }
 
-    public static void validateOutputDir(File outputDir) throws ValidationException {
+    public static void validateOutputDir(File outputDir) throws STValidationException {
         if(!outputDir.exists()){
-            throw new ValidationException(outputDir.getAbsolutePath(), stringsCli.getString("StvValidationOutputDirDoesNotExist"), true);
+            throw new STValidationException(outputDir.getAbsolutePath(),
+                    stringsCli.getString("StvValidationOutputDirDoesNotExist"), true);
         } else if(!outputDir.canWrite()) {
-            throw new ValidationException(outputDir.getAbsolutePath(), stringsCli.getString("StvValidationOutputDirCannotWrite"), true);
+            throw new STValidationException(outputDir.getAbsolutePath(),
+                    stringsCli.getString("StvValidationOutputDirCannotWrite"), true);
         } else if (outputDir.isHidden()) {
-            throw new ValidationException(outputDir.getAbsolutePath(), stringsCli.getString("StvValidationOutputDirIsHidden"), true);
+            throw new STValidationException(outputDir.getAbsolutePath(),
+                    stringsCli.getString("StvValidationOutputDirIsHidden"), true);
         } else if (!outputDir.canRead()) {
-            throw new ValidationException(outputDir.getAbsolutePath(), stringsCli.getString("StvValidationOutputDirCannotRead"), false);
+            throw new STValidationException(outputDir.getAbsolutePath(),
+                    stringsCli.getString("StvValidationOutputDirCannotRead"), false);
         } else if (!outputDir.isDirectory()) {
-            throw new ValidationException(outputDir.getAbsolutePath(), stringsCli.getString("StvValidationOutputDirIsNoDir"), true);
+            throw new STValidationException(outputDir.getAbsolutePath(),
+                    stringsCli.getString("StvValidationOutputDirIsNoDir"), true);
         }
     }
 
     // TODO: validate filename suffix for output files with [^-_.A-Za-z0-9]
 
-    private static class ValidationException extends IllegalArgumentException {
-        private String optionOrParameter;
-        private boolean isFatal;
-
-        ValidationException(String optionOrParameter, String message, boolean isFatal) {
-            super(message);
-            this.optionOrParameter = optionOrParameter;
-            this.isFatal = isFatal;
-        }
-
-        public String getOptionOrParameter() {
-            return optionOrParameter;
-        }
-
-        public boolean isFatal() {
-            return isFatal;
+    private static <E extends Enum<E>> void validateStringInEnum(final Class<E> enumClass, String s)
+            throws STValidationException {
+        if(!Optionable.isValidOption(enumClass, s)) {
+            throw new STValidationException(s, stringsCli.getString("StvValidationInvalidOption"), true);
         }
     }
-}
 
-enum ProfanityActionEnum {
-    MARKED ("Marked"),
-    DELETED ("Deleted"),
-    NOACTION ("NoAction");
-
-    private String profanityAction;
-
-    ProfanityActionEnum(String s) {
-        this.profanityAction = s;
+    public static void validateProfanityAction(String profanityAction) throws STValidationException {
+        try {
+            validateStringInEnum(ProfanityAction.class, profanityAction);
+        } catch (STValidationException ex) {
+            throw ex;
+        }
     }
 
-    public String getProfanityAction() {
-        return profanityAction;
-    }
-}
-
-enum ProfanityMarkerEnum {
-    ASTERISK ("Asterisk"),
-    TAG ("Tag");
-
-    private String profanityMarker;
-
-    ProfanityMarkerEnum(String s) {
-        this.profanityMarker = s;
+    public static void validateProfanityMarker(String profanityMarker) throws STValidationException {
+        try {
+            validateStringInEnum(ProfanityMarker.class, profanityMarker);
+        } catch (STValidationException ex) {
+            throw ex;
+        }
     }
 
-    public String getProfanityMarker() {
-        return profanityMarker;
-    }
-}
-
-enum AudioFormatEnum {
-    WAV ("audio/wav"),
-    MP3 ("audio/mp3");
-
-    private String audioFormat;
-
-    AudioFormatEnum(String s) {
-        this.audioFormat = s;
+    public static void validateAudioFormat(String audioFormat) throws STValidationException {
+        try {
+            validateStringInEnum(AudioFormat.class, audioFormat);
+        } catch (STValidationException ex) {
+            throw ex;
+        }
     }
 
-    public String getAudioFormat() {
-        return audioFormat;
-    }
-}
-
-enum FeaturesEnum {
-    TESTTOSPEACH ("TextToSpeech"),
-    PARTIAL ("Partial"),
-    TIMINGINFO ("TimingInfo");
-
-    private final String feature;
-
-    FeaturesEnum(String s) {
-        this.feature = s;
+    public static void validateFeature(String feature) throws STValidationException {
+        try {
+            validateStringInEnum(Feature.class, feature);
+        } catch (STValidationException ex) {
+            throw ex;
+        }
     }
 
-    public String getFeature() {
-        return feature;
+    interface Optionable {
+        String getOptionValue();
+
+        static <E extends Enum<E>> boolean isValidOption(final Class<E> enumClass, String testOption) {
+            for (E e : EnumUtils.getEnumList(enumClass)) {
+                try {
+                    Optionable ce = (Optionable) e;
+                    if(ce.getOptionValue().compareTo(testOption) == 0) {
+                        return true;
+                    }
+                } catch (Exception ex) {
+                    return false;
+                }
+            }
+            ;
+            return false;
+        }
+    }
+
+    enum ProfanityAction implements Optionable {
+        MARKED ("Marked"),
+        DELETED ("Deleted"),
+        NOACTION ("NoAction");
+
+        private String profanityAction;
+
+        ProfanityAction(String s) {
+            this.profanityAction = s;
+        }
+
+        @Override
+        public String getOptionValue() {
+            return profanityAction;
+        }
+    }
+
+    enum ProfanityMarker implements Optionable {
+        ASTERISK ("Asterisk"),
+        TAG ("Tag");
+
+        private String profanityMarker;
+
+        ProfanityMarker(String s) {
+            this.profanityMarker = s;
+        }
+
+        public String getOptionValue() {
+            return profanityMarker;
+        }
+    }
+
+    enum AudioFormat implements Optionable {
+        WAV ("audio/wav"),
+        MP3 ("audio/mp3");
+
+        private String audioFormat;
+
+        AudioFormat(String s) {
+            this.audioFormat = s;
+        }
+
+        public String getOptionValue() {
+            return audioFormat;
+        }
+    }
+
+    enum Feature implements Optionable {
+        TESTTOSPEACH ("TextToSpeech"),
+        PARTIAL ("Partial"),
+        TIMINGINFO ("TimingInfo");
+
+        private final String feature;
+
+        Feature(String s) {
+            this.feature = s;
+        }
+
+        public String getOptionValue() {
+            return feature;
+        }
     }
 }
