@@ -27,8 +27,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Default configuration values. These can either be read directly (overriding values from actual configuration files)
- * or be used to populate newly created configuration files.
+ * Default configuration values.
  *
  * @author Tobias Weisserth <tobias.weisserth@microsoft.com>
  */
@@ -36,8 +35,19 @@ public enum STConfigurationDefault {
     API_ENDPOINT("azure.speechtranslation.api.endpoint", "wss://dev.microsofttranslator.com"),
     API_PATH("azure.speechtranslation.api.path", "/speech/translate"),
     API_VERSION("azure.speechtranslation.api.version", "api-version=1.0"),
-    API_FEATURES("azure.speechtranslation.api.features", "texttospeech"),
-    WEBSOCKET_TIMEOUT("settings.websocket.upload.timeout", "1000");
+    API_FEATURES("azure.speechtranslation.api.features", "TextToSpeech"),
+    API_PROFANITY_ACTION("azure.speechtranslation.api.profanityaction", "Marked"),
+    API_PROFANITY_MARKER("azure.speechtranslation.api.profanitymarker", "Asterisk"),
+    API_AUDIO("azure.speechtranslation.api.audio", "audio/wav"),
+    API_VOICE("azure.speechtranslation.api.voice", ""),
+    API_KEY("azure.speechtranslation.api.key", ""),
+    WEBSOCKET_TIMEOUT("settings.websocket.upload.timeout", "1000"),
+    WEBSOCKET_MAX_BINARY_MSG("settings.websocket.maxbinary", ""),
+    WEBSOCKET_MAX_TEXT_MSG("settings.websocket.maxtext", ""),
+    WEBSOCKET_BUFFER("settings.websocket.buffer", ""),
+    CLI_POSTFIX("settings.cli.postfix", ".translation"),
+    CLI_OUTPUT_DIR("settings.cli.outputdir", ""),
+    CLI_OMIT_TEXT("settings.cli.omittext", "");
 
     private final String key;
     private final String value;

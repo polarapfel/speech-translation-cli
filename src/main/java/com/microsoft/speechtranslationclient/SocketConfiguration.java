@@ -23,35 +23,15 @@
  */
 package com.microsoft.speechtranslationclient;
 
-//import javax.websocket.CloseReason;
-//import javax.websocket.Session;
-import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assertions.fail;
-import org.junit.jupiter.api.Assumptions.*;
+import java.util.*;
+import javax.websocket.ClientEndpointConfig;
 
-/**
- *
- * @author Tobias Weisserth <tobias.weisserth@microsoft.com>
- */
-public class ClientTest {
-    
-    public ClientTest() {
+public class SocketConfiguration extends ClientEndpointConfig.Configurator {
+    // Replace the subscriptionKey string value with your valid subscription key.
+    static String key = "09e005dedff6487586fce439e4bb4381";
+
+    @Override
+    public void beforeRequest (Map<String,List<String>> headers) {
+        headers.put("Ocp-Apim-Subscription-Key", Arrays.asList (key));
     }
-    
-    @BeforeAll
-    public static void setUpClass() {
-    }
-    
-    @AfterAll
-    public static void tearDownClass() {
-    }
-    
-    @BeforeEach
-    public void setUp() {
-    }
-    
-    @AfterEach
-    public void tearDown() {
-    }    
 }

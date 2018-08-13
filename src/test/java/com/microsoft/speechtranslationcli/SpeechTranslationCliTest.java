@@ -45,11 +45,11 @@ public class SpeechTranslationCliTest {
     public static void tearDownClass() {
     }
     
-    @BeforeAll
+    @BeforeEach
     public static void setUp() {
     }
     
-    @AfterAll
+    @AfterEach
     public static void tearDown() {
     }    
 }

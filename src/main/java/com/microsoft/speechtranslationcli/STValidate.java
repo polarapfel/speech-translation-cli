@@ -24,6 +24,7 @@
 package com.microsoft.speechtranslationcli;
 
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,6 +42,7 @@ public class STValidate {
     public static void validateFiles(File[] inputFiles) throws STValidationException {
         new ArrayList<File>(Arrays.asList(inputFiles)).forEach(new Consumer<File>() {
             public void accept(File file) {
+                classLogger.trace(stringsCli.getString("log4jStvTraceFileValidation") + file.getAbsolutePath());
                 if(!file.exists()){
                     throw new STValidationException(file.getAbsolutePath(),
                             stringsCli.getString("StvValidationFileDoesNotExist"), true);
@@ -114,20 +116,28 @@ public class STValidate {
     }
 
     public static void validateFeature(String feature) throws STValidationException {
-        try {
-            validateStringInEnum(Feature.class, feature);
-        } catch (STValidationException ex) {
-            throw ex;
+        String[] featureSplits = StringUtils.split(feature, ",");
+        if (featureSplits == null || featureSplits.length == 0) return;
+        for (String f : featureSplits) {
+            try {
+                validateStringInEnum(Feature.class, f);
+            } catch (STValidationException ex) {
+                throw ex;
+            }
         }
     }
 
     interface Optionable {
         String getOptionValue();
+        boolean equalsUnset(String optionToTest);
 
         static <E extends Enum<E>> boolean isValidOption(final Class<E> enumClass, String testOption) {
             for (E e : EnumUtils.getEnumList(enumClass)) {
                 try {
                     Optionable ce = (Optionable) e;
+                    if(ce.equalsUnset(testOption)) {
+                        return true;
+                    }
                     if(ce.getOptionValue().compareTo(testOption) == 0) {
                         return true;
                     }
@@ -143,7 +153,8 @@ public class STValidate {
     enum ProfanityAction implements Optionable {
         MARKED ("Marked"),
         DELETED ("Deleted"),
-        NOACTION ("NoAction");
+        NOACTION ("NoAction"),
+        UNSET(null);
 
         private String profanityAction;
 
@@ -155,11 +166,18 @@ public class STValidate {
         public String getOptionValue() {
             return profanityAction;
         }
+
+        @Override
+        public boolean equalsUnset(String optionToTest) {
+            if (ProfanityAction.UNSET.profanityAction == optionToTest) return true;
+            return false;
+        }
     }
 
     enum ProfanityMarker implements Optionable {
         ASTERISK ("Asterisk"),
-        TAG ("Tag");
+        TAG ("Tag"),
+        UNSET(null);
 
         private String profanityMarker;
 
@@ -170,11 +188,18 @@ public class STValidate {
         public String getOptionValue() {
             return profanityMarker;
         }
+
+        @Override
+        public boolean equalsUnset(String optionToTest) {
+            if (ProfanityMarker.UNSET.profanityMarker == optionToTest) return true;
+            return false;
+        }
     }
 
     enum AudioFormat implements Optionable {
         WAV ("audio/wav"),
-        MP3 ("audio/mp3");
+        MP3 ("audio/mp3"),
+        UNSET (null);
 
         private String audioFormat;
 
@@ -185,12 +210,19 @@ public class STValidate {
         public String getOptionValue() {
             return audioFormat;
         }
+
+        @Override
+        public boolean equalsUnset(String optionToTest) {
+            if (AudioFormat.UNSET.audioFormat == optionToTest) return true;
+            return false;
+        }
     }
 
     enum Feature implements Optionable {
         TESTTOSPEACH ("TextToSpeech"),
         PARTIAL ("Partial"),
-        TIMINGINFO ("TimingInfo");
+        TIMINGINFO ("TimingInfo"),
+        UNSET (null);
 
         private final String feature;
 
@@ -200,6 +232,12 @@ public class STValidate {
 
         public String getOptionValue() {
             return feature;
+        }
+
+        @Override
+        public boolean equalsUnset(String optionToTest) {
+            if (Feature.UNSET.feature == optionToTest) return true;
+            return false;
         }
     }
 }

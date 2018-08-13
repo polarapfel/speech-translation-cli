@@ -36,8 +36,11 @@ import java.util.jar.Manifest;
 
 import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.configuration2.FileBasedConfiguration;
+import org.apache.commons.configuration2.PropertiesConfiguration;
 import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
+import org.apache.commons.configuration2.builder.fluent.Configurations;
 import org.apache.commons.configuration2.builder.fluent.Parameters;
+import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -95,8 +98,21 @@ public class STConfiguration {
             instance = new STConfiguration();
             instance.setVersion();
             instance.initConfigFile();
+            instance.loadConfig();
         }
         return instance;
+    }
+
+    private void loadConfig() {
+        this.parameters = new Parameters();
+        builder = new FileBasedConfigurationBuilder<FileBasedConfiguration>(PropertiesConfiguration.class).configure(parameters.properties().setFileName(FULLPATH));
+        builder.setAutoSave(false); // we don't want to write back to the config file
+        try {
+            configuration = builder.getConfiguration();
+        } catch (Exception e) {
+            classLogger.debug(stringsCli.getString("log4jStcDebugConfigurationBuilderFailed"), e);
+            classLogger.fatal(stringsCli.getString("log4jStcFatalConfigurationBuilderFailed" + FULLPATH));
+        }
     }
 
     private void setVersion() {
@@ -230,7 +246,7 @@ public class STConfiguration {
     /**
      * @return the stringsCli
      */
-    ResourceBundle getStringsCli() {
+    public ResourceBundle getStringsCli() {
         return stringsCli;
     }
 

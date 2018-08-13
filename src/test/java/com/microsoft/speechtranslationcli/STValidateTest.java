@@ -53,6 +53,7 @@ public class STValidateTest {
     public void tearDown() {
     }
 
+    @Disabled
     @Test
     void testAudioFormatValidation() {
         try {
