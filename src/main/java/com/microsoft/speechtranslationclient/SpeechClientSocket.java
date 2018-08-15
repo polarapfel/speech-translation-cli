@@ -30,21 +30,20 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
-import com.microsoft.speechtranslationcli.STCli;
+import com.microsoft.speechtranslationcli.STConfiguration;
+import com.microsoft.speechtranslationcli.STConfigurationDefault;
+import com.microsoft.speechtranslationcli.STExitCode;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ResourceBundle;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import org.apache.commons.configuration2.Configuration;
-import org.apache.commons.configuration2.FileBasedConfiguration;
-import org.apache.commons.configuration2.PropertiesConfiguration;
-import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
-import org.apache.commons.configuration2.builder.fluent.Parameters;
-import org.apache.commons.configuration2.ex.ConfigurationException;
 import static org.apache.commons.io.IOUtils.copy;
 
 import org.eclipse.jetty.websocket.api.BatchMode;
@@ -55,34 +54,29 @@ import org.eclipse.jetty.websocket.api.annotations.OnWebSocketConnect;
 import org.eclipse.jetty.websocket.api.annotations.OnWebSocketMessage;
 import org.eclipse.jetty.websocket.api.annotations.WebSocket;
 
-@WebSocket(maxTextMessageSize = 64 * 1024, maxBinaryMessageSize = 64 * 4096,
-        batchMode = BatchMode.AUTO, inputBufferSize = 64 * 4096, maxIdleTime = 60)
-public class SpeechClientSocket {
-    private Parameters parameters;
-    private FileBasedConfigurationBuilder<FileBasedConfiguration> builder;
-    private Configuration configuration;
+/*
+General idea is to always handle a single file with a single web socket connection. If you want concurrency, open multiple
+sockets at a time with each socket handling its single file.
+ */
 
-    private STCli commandLine;
-    
+@WebSocket(maxTextMessageSize = 64 * 1024, maxBinaryMessageSize = 64 * 4096,
+        batchMode = BatchMode.AUTO, inputBufferSize = 64 * 1024, maxIdleTime = 60) // defaults, will be overwritten from settings
+public class SpeechClientSocket {
     private final Logger classLogger = LogManager.getLogger(SpeechClientSocket.class);
-    static String host = "wss://dev.microsofttranslator.com";
-    static String path = "/speech/translate";
-    static String params = "?api-version=1.0&from=en-US&to=it-IT&features=texttospeech&voice=it-IT-Elsa";
-    static String uri = host + path + params;
-      
+
     private final CountDownLatch closeLatch;
     private Session session = null;
+
+    // Everything this socket needs to operate from comes from the shared configuration and the file reference
+    private final STConfiguration configInstance = STConfiguration.getInstance();
+    private File inputFile;
+    int inputFileLength;
+
+    private final ResourceBundle stringsClient = configInstance.getStringsClient();
     
-    public SpeechClientSocket() {
-        this.parameters = new Parameters();
-        builder = new FileBasedConfigurationBuilder<FileBasedConfiguration>(PropertiesConfiguration.class)
-                .configure(parameters.properties()
-                        .setFileName("Settings.properties"));
-        try {
-            configuration = builder.getConfiguration();
-        } catch (ConfigurationException e) {
-            classLogger.error("Configuration properties could not be loaded.", e);
-        }
+    public SpeechClientSocket(File file) {
+        inputFile = file;
+        inputFileLength = (int) inputFile.length();
         this.closeLatch = new CountDownLatch(1);
     }
     
@@ -92,55 +86,91 @@ public class SpeechClientSocket {
     
     @OnWebSocketClose
     public void onClose(int statusCode, String reason) {
-        classLogger.trace("Connection closed: %d - %s%n", statusCode, reason);
+        classLogger.trace( stringsClient.getString("log4jSCSTraceConnectionClose") + "%d - %s%n", statusCode, reason);
         this.session = null;
         this.closeLatch.countDown(); // trigger latch
     }
 
     @OnWebSocketConnect
     public void onConnect(Session session) {
-        classLogger.trace("Got connect: %s%n", session);
+        classLogger.trace(stringsClient.getString("log4jSCSTraceConnectionOpen") + "%s%n", session);
         this.session = session;
+
+        session.getPolicy().setMaxBinaryMessageSize(configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_MAX_BINARY_MSG.getKey()));
+        session.getPolicy().setMaxTextMessageSize(configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_MAX_TEXT_MSG.getKey()));
+        session.getPolicy().setIdleTimeout(configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_MAX_IDLE.getKey()));
+        session.getPolicy().setInputBufferSize(configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_BUFFER.getKey()));
+
         try {
-            File inputFile = new File(configuration.getString("settings.default.file.input"));
             FileInputStream inputStream = new FileInputStream(inputFile);
-            int inputFileLength = (int) inputFile.length();
             byte inputBuffer[] = new byte[inputFileLength];
             inputStream.read(inputBuffer);
             inputStream.close();
             
-            classLogger.trace("Sending file.");
+            classLogger.trace(stringsClient.getString("log4jSCSTraceSendingFile") + inputFile.getAbsolutePath());
             Future<Void> fut;
             fut = session.getRemote().sendBytesByFuture(ByteBuffer.wrap(inputBuffer));
-            fut.get(inputFileLength * configuration.getInt("settings.websocket.upload.timeout"), TimeUnit.NANOSECONDS); // wait for send to complete. TODO make this dependant on length of file.
-            classLogger.trace("File sent.");
-
-            session.close(StatusCode.NORMAL, "I'm done");
+            fut.get(inputFileLength * configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_TIMEOUT.getKey()),
+                    TimeUnit.NANOSECONDS);
+            classLogger.trace(stringsClient.getString("log4jSCSTraceSendingFileDone") + inputFile.getAbsolutePath());
+            session.close(StatusCode.NORMAL, stringsClient.getString("SCSSessionCloseReasonDone"));
         } catch (InterruptedException | ExecutionException t) {
-            classLogger.error("Something went wrong when connecting.", t);
+            classLogger.debug(stringsClient.getString("log4jSCSInterruptionException"), t);
+            classLogger.error(stringsClient.getString("log4jSCSInterruptionException"));
+            System.exit(STExitCode.CONNECTION_ERROR.getId());
+            // TODO: be more forgiving when prompted to at the CLI
+            // TODO: add retry logic
         } catch (TimeoutException o){
-            classLogger.error("Timeout for upload was exceeded.", o);
+            classLogger.debug(inputFile.getAbsolutePath() + stringsClient.getString("log4jSCSTimeoutException")
+                    + inputFileLength * configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_TIMEOUT.getKey()) + "ns", o);
+            classLogger.error(inputFile.getAbsolutePath() + stringsClient.getString("log4jSCSTimeoutException")
+                    + inputFileLength * configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_TIMEOUT.getKey()) + "ns");
+            System.exit(STExitCode.UPLOAD_TIMEOUT.getId());
         } catch (IOException e) {
-            classLogger.error("Error reading input file.", e);
+            classLogger.debug(stringsClient.getString("log4jSCSIOExceptionRead") + inputFile.getAbsolutePath(), e);
+            classLogger.error(stringsClient.getString("log4jSCSIOExceptionRead") + inputFile.getAbsolutePath());
+            System.exit(STExitCode.FILE_READ_ERROR.getId());
         }
     }
     
     @OnWebSocketMessage
     public void onMessage(Session session, InputStream stream) {
-        classLogger.trace("Receiving streamed data.");
+        classLogger.trace(stringsClient.getString("log4jSCSTraceOnMessageBinary"));
         try {
-            FileOutputStream outputStream = new FileOutputStream("");
+            File fileTranslated = new File(configInstance.getConfiguration().getString(STConfigurationDefault.CLI_OUTPUT_DIR.getKey()),
+                    FilenameUtils.getBaseName(inputFile.getName())
+                            + configInstance.getConfiguration().getString(STConfigurationDefault.CLI_POSTFIX.getKey())
+                            + "." + FilenameUtils.getExtension(inputFile.getName()));
+
+            FileOutputStream outputStream = new FileOutputStream(fileTranslated);
             copy(stream, outputStream);
             stream.close();
-            classLogger.trace("Received buffer written to file.");
-            session.close(StatusCode.NORMAL, "I'm done");
+            classLogger.trace(stringsClient.getString("log4jSCSTraceReceivingFileDone") + fileTranslated.getAbsolutePath());
+            session.close(StatusCode.NORMAL, stringsClient.getString("SCSSessionCloseReasonDone"));
         } catch (IOException e) {
-            classLogger.error("Error in OnMessage while receiving streamed data.", e);
+            classLogger.debug(stringsClient.getString("log4jSCSIOExceptionWrite"), e);
+            classLogger.error(stringsClient.getString("log4jSCSIOExceptionWrite"));
+            System.exit(STExitCode.FILE_WRITE_ERROR.getId());
         }
     }
     
     @OnWebSocketMessage
     public void onMessage(String msg) {
-        classLogger.trace("Got msg: %s%n", msg);
+        if (configInstance.getConfiguration().getBoolean(STConfigurationDefault.CLI_OMIT_TEXT.getKey())) {
+            classLogger.trace(stringsClient.getString("log4jSCSTraceOmitMessageReceived"), msg);
+        } else {
+            classLogger.trace(stringsClient.getString("log4jSCSTraceOnMessageText"), msg);
+            File fileTranslatedJson = new File(configInstance.getConfiguration().getString(STConfigurationDefault.CLI_OUTPUT_DIR.getKey()),
+                    FilenameUtils.getBaseName(inputFile.getName())
+                            + configInstance.getConfiguration().getString(STConfigurationDefault.CLI_POSTFIX.getKey())
+                            + ".json");
+            try {
+                FileUtils.writeStringToFile(fileTranslatedJson, msg);
+            } catch (IOException e) {
+                classLogger.debug(stringsClient.getString("log4jSCSIOExceptionWrite"), e);
+                classLogger.error(stringsClient.getString("log4jSCSIOExceptionWrite"));
+                System.exit(STExitCode.FILE_WRITE_ERROR.getId());
+            }
+        }
     }
 }

@@ -93,7 +93,7 @@ public class STConfiguration {
     /**
      * @return the singleton instance of this class
      */
-    synchronized static STConfiguration getInstance() {
+    public synchronized static STConfiguration getInstance() {
         if (instance == null) {
             instance = new STConfiguration();
             instance.setVersion();
