@@ -21,10 +21,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.microsoft.speechtranslationclient;
+package com.microsoft.speechtranslationcli;
 
-import java.util.List;
-import java.util.Map;
+//import javax.websocket.CloseReason;
+//import javax.websocket.Session;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -34,9 +34,9 @@ import org.junit.jupiter.api.Assumptions.*;
  *
  * @author Tobias Weisserth <tobias.weisserth@microsoft.com>
  */
-public class ConfigTest {
+public class ClientTest {
     
-    public ConfigTest() {
+    public ClientTest() {
     }
     
     @BeforeAll

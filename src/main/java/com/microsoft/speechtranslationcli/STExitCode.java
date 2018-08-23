@@ -36,7 +36,9 @@ public enum STExitCode {
     UPLOAD_TIMEOUT(5, "Upload timeout exceeded."),
     FILE_READ_ERROR(6, "File could not be read."),
     FILE_WRITE_ERROR(7, "File could not be written."),
-    RUNTIME_ERROR(8, "A runtime error occurred.");
+    RUNTIME_ERROR(8, "A runtime error occurred."),
+    INTERNAL_ERROR(9, "Internal error occurred."),
+    UPLOAD_ERROR(10, "File upload error.");
 
 
     private final int id;

@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.microsoft.speechtranslationclient;
+package com.microsoft.speechtranslationcli;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -30,37 +30,30 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
-import com.microsoft.speechtranslationcli.STConfiguration;
-import com.microsoft.speechtranslationcli.STConfigurationDefault;
-import com.microsoft.speechtranslationcli.STExitCode;
+import com.musicg.wave.WaveHeader;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.text.MessageFormat;
+import java.util.Arrays;
 import java.util.ResourceBundle;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+
 import static org.apache.commons.io.IOUtils.copy;
 
-import org.eclipse.jetty.websocket.api.BatchMode;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.StatusCode;
-import org.eclipse.jetty.websocket.api.annotations.OnWebSocketClose;
-import org.eclipse.jetty.websocket.api.annotations.OnWebSocketConnect;
-import org.eclipse.jetty.websocket.api.annotations.OnWebSocketMessage;
-import org.eclipse.jetty.websocket.api.annotations.WebSocket;
+import org.eclipse.jetty.websocket.api.annotations.*;
 
 /*
 General idea is to always handle a single file with a single web socket connection. If you want concurrency, open multiple
 sockets at a time with each socket handling its single file.
  */
 
-@WebSocket(maxTextMessageSize = 64 * 1024, maxBinaryMessageSize = 64 * 4096,
-        batchMode = BatchMode.AUTO, inputBufferSize = 64 * 1024, maxIdleTime = 60) // defaults, will be overwritten from settings
+@WebSocket
 public class SpeechClientSocket {
     private final Logger classLogger = LogManager.getLogger(SpeechClientSocket.class);
 
@@ -73,27 +66,27 @@ public class SpeechClientSocket {
     int inputFileLength;
 
     private final ResourceBundle stringsClient = configInstance.getStringsClient();
-    
+
     public SpeechClientSocket(File file) {
         inputFile = file;
         inputFileLength = (int) inputFile.length();
         this.closeLatch = new CountDownLatch(1);
     }
-    
+
     public boolean awaitClose(int duration, TimeUnit unit) throws InterruptedException {
         return this.closeLatch.await(duration, unit);
     }
-    
+
     @OnWebSocketClose
     public void onClose(int statusCode, String reason) {
-        classLogger.trace( stringsClient.getString("log4jSCSTraceConnectionClose") + "%d - %s%n", statusCode, reason);
+        classLogger.trace(MessageFormat.format(stringsClient.getString("log4jSCSTraceConnectionClose"), String.valueOf(statusCode), reason));
         this.session = null;
         this.closeLatch.countDown(); // trigger latch
     }
 
     @OnWebSocketConnect
     public void onConnect(Session session) {
-        classLogger.trace(stringsClient.getString("log4jSCSTraceConnectionOpen") + "%s%n", session);
+        classLogger.trace(stringsClient.getString("log4jSCSTraceConnectionOpen"), session);
         this.session = session;
 
         session.getPolicy().setMaxBinaryMessageSize(configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_MAX_BINARY_MSG.getKey()));
@@ -101,42 +94,19 @@ public class SpeechClientSocket {
         session.getPolicy().setIdleTimeout(configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_MAX_IDLE.getKey()));
         session.getPolicy().setInputBufferSize(configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_BUFFER.getKey()));
 
-        try {
-            FileInputStream inputStream = new FileInputStream(inputFile);
-            byte inputBuffer[] = new byte[inputFileLength];
-            inputStream.read(inputBuffer);
-            inputStream.close();
-            
-            classLogger.trace(stringsClient.getString("log4jSCSTraceSendingFile") + inputFile.getAbsolutePath());
-            Future<Void> fut;
-            fut = session.getRemote().sendBytesByFuture(ByteBuffer.wrap(inputBuffer));
-            fut.get(inputFileLength * configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_TIMEOUT.getKey()),
-                    TimeUnit.NANOSECONDS);
-            classLogger.trace(stringsClient.getString("log4jSCSTraceSendingFileDone") + inputFile.getAbsolutePath());
-            session.close(StatusCode.NORMAL, stringsClient.getString("SCSSessionCloseReasonDone"));
-        } catch (InterruptedException | ExecutionException t) {
-            classLogger.debug(stringsClient.getString("log4jSCSInterruptionException"), t);
-            classLogger.error(stringsClient.getString("log4jSCSInterruptionException"));
-            System.exit(STExitCode.CONNECTION_ERROR.getId());
-            // TODO: be more forgiving when prompted to at the CLI
-            // TODO: add retry logic
-        } catch (TimeoutException o){
-            classLogger.debug(inputFile.getAbsolutePath() + stringsClient.getString("log4jSCSTimeoutException")
-                    + inputFileLength * configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_TIMEOUT.getKey()) + "ns", o);
-            classLogger.error(inputFile.getAbsolutePath() + stringsClient.getString("log4jSCSTimeoutException")
-                    + inputFileLength * configInstance.getConfiguration().getInt(STConfigurationDefault.WEBSOCKET_TIMEOUT.getKey()) + "ns");
-            System.exit(STExitCode.UPLOAD_TIMEOUT.getId());
-        } catch (IOException e) {
-            classLogger.debug(stringsClient.getString("log4jSCSIOExceptionRead") + inputFile.getAbsolutePath(), e);
-            classLogger.error(stringsClient.getString("log4jSCSIOExceptionRead") + inputFile.getAbsolutePath());
-            System.exit(STExitCode.FILE_READ_ERROR.getId());
-        }
+        sendFileInChunks();
     }
-    
+
     @OnWebSocketMessage
     public void onMessage(Session session, InputStream stream) {
         classLogger.trace(stringsClient.getString("log4jSCSTraceOnMessageBinary"));
         try {
+
+            // TODO change file type extension based on format
+
+
+            //String test = STValidate.AudioFormat.WAV.getOptionValue();
+
             File fileTranslated = new File(configInstance.getConfiguration().getString(STConfigurationDefault.CLI_OUTPUT_DIR.getKey()),
                     FilenameUtils.getBaseName(inputFile.getName())
                             + configInstance.getConfiguration().getString(STConfigurationDefault.CLI_POSTFIX.getKey())
@@ -153,24 +123,96 @@ public class SpeechClientSocket {
             System.exit(STExitCode.FILE_WRITE_ERROR.getId());
         }
     }
-    
+
     @OnWebSocketMessage
     public void onMessage(String msg) {
         if (configInstance.getConfiguration().getBoolean(STConfigurationDefault.CLI_OMIT_TEXT.getKey())) {
-            classLogger.trace(stringsClient.getString("log4jSCSTraceOmitMessageReceived"), msg);
+            classLogger.trace(stringsClient.getString("log4jSCSTraceOmitMessageReceived"));
         } else {
-            classLogger.trace(stringsClient.getString("log4jSCSTraceOnMessageText"), msg);
+            classLogger.trace(MessageFormat.format(stringsClient.getString("log4jSCSTraceOnMessageText"), msg));
             File fileTranslatedJson = new File(configInstance.getConfiguration().getString(STConfigurationDefault.CLI_OUTPUT_DIR.getKey()),
                     FilenameUtils.getBaseName(inputFile.getName())
                             + configInstance.getConfiguration().getString(STConfigurationDefault.CLI_POSTFIX.getKey())
                             + ".json");
             try {
-                FileUtils.writeStringToFile(fileTranslatedJson, msg);
+                FileUtils.writeStringToFile(fileTranslatedJson, msg, "UTF8");
             } catch (IOException e) {
                 classLogger.debug(stringsClient.getString("log4jSCSIOExceptionWrite"), e);
                 classLogger.error(stringsClient.getString("log4jSCSIOExceptionWrite"));
                 System.exit(STExitCode.FILE_WRITE_ERROR.getId());
             }
+        }
+    }
+
+    @OnWebSocketError
+    public void onError(Session s, Throwable t) {
+        classLogger.debug(stringsClient.getString("log4jSCSDebugOnWebSocketError"), t);
+        classLogger.error(stringsClient.getString("log4jSCSDebugOnWebSocketError"));
+        System.exit(STExitCode.CONNECTION_ERROR.getId());
+    }
+
+    /*
+     * The general idea here is to play nice with the way the API service endpoint has been designed. The service expects
+     * real time communication, not large pre-recorded audio files. The service will be unable to accept a very large
+     * audio file that is being sent in one piece faster than the service can work through it. To prevent malicious
+     * resource allocation, the connection will be closed by the endpoint if that happens.
+     *
+     * The safest way to deal with this is to chunk the audio into 0.25s chunks and upload them with a delay in between.
+     *
+     * This method offers an implementation for this, determining the length of the audio file by parsing the WAV header
+     * using the musicg library.
+     *
+     * A buffer of 320000 bytes of silence is sent after the last chunk uploaded.
+     */
+    private void sendFileInChunks() {
+        try {
+            InputStream inputFileHeader = new FileInputStream(inputFile);
+
+            InputStream inputStream = new FileInputStream(inputFile);
+            WaveHeader fileHeader = new WaveHeader(inputFileHeader);
+            int sampleRate = fileHeader.getSampleRate();
+            double lengthInSeconds = (inputFileLength / ((sampleRate * fileHeader.getChannels() * fileHeader.getBitsPerSample()) / 8.0));
+            int numberOfChunks = (int) Math.ceil(lengthInSeconds / 0.25);
+            int chunkSize = (int) Math.ceil((double) inputFileLength / numberOfChunks);
+            inputFileHeader.close();
+
+            byte[] inputBuffer = new byte[inputFileLength];
+
+            int delta = chunkSize * numberOfChunks - inputFileLength;
+
+            int bytesRead = inputStream.read(inputBuffer);
+            classLogger.debug(bytesRead + stringsClient.getString("log4jSCSDebugBytesReadToBuffer") + inputFileLength);
+            inputStream.close();
+
+            if (bytesRead < inputFileLength) {
+                classLogger.warn(MessageFormat.format(stringsClient.getString("log4jSCSWarnPartialFileRead"), bytesRead, inputFileLength, inputFile.getAbsolutePath()));
+            }
+
+            classLogger.trace(MessageFormat.format(stringsClient.getString("log4jSCSTraceSendingFile"), inputFile.getAbsolutePath(), numberOfChunks));
+            for (int i = 0; i < numberOfChunks; i++) {
+                int from = i * chunkSize;
+                int to = i * chunkSize + chunkSize;
+                if (i == numberOfChunks - 1) {
+                    to = to - delta;
+                }
+                byte[] chunkBuffer = Arrays.copyOfRange(inputBuffer, from, to);
+                session.getRemote().sendBytes(ByteBuffer.wrap(chunkBuffer), new STSendChunkStatus(inputFile, i, numberOfChunks));
+                if (i != numberOfChunks - 1) {
+                    try {
+                        classLogger.debug(MessageFormat.format(stringsClient.getString("log4jDebugChunkDelay"), String.valueOf(500)));
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        classLogger.debug(stringsClient.getString("log4jSCSDebugInternalError"), e);
+                    }
+                }
+            }
+
+            byte[] silence = new byte[320000];
+            session.getRemote().sendBytes(ByteBuffer.wrap(silence), new STSendSilenceStatus(320000));
+        } catch (IOException e) {
+            classLogger.debug(stringsClient.getString("log4jSCSIOExceptionRead") + inputFile.getAbsolutePath(), e);
+            classLogger.error(stringsClient.getString("log4jSCSIOExceptionRead") + inputFile.getAbsolutePath());
+            System.exit(STExitCode.FILE_READ_ERROR.getId());
         }
     }
 }

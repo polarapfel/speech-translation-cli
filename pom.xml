@@ -23,7 +23,7 @@
         <dependency>
             <groupId>org.eclipse.jetty.websocket</groupId>
             <artifactId>javax-websocket-client-impl</artifactId>
-            <version>9.4.11.v20180605</version>
+            <version>9.4.12.RC2</version>
         </dependency>
         <dependency>
             <groupId>commons-io</groupId>
@@ -66,6 +66,11 @@
             <groupId>commons-beanutils</groupId>
             <artifactId>commons-beanutils</artifactId>
             <version>1.9.3</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.fracpete</groupId>
+            <artifactId>musicg</artifactId>
+            <version>1.4.2.2</version>
         </dependency>
     </dependencies>
     <build>

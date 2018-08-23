@@ -23,7 +23,6 @@
  */
 package com.microsoft.speechtranslationcli;
 
-import com.microsoft.speechtranslationclient.SpeechClientSocket;
 import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -35,7 +34,12 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLEncoder;
+import java.util.Properties;
 import java.util.ResourceBundle;
 import java.util.concurrent.TimeUnit;
 
@@ -51,7 +55,7 @@ public class STCli implements Runnable {
      * TODO: Currently, picocli does not allow for ResourceBundle properties in its annotations, so all text literals are hard-coded :(
      */
 
-    @Option(names = { "-v", "--verbose" }, description = "Verbose mode. Helpful for troubleshooting. " +
+    @Option(names = {"-v", "--verbose"}, description = "Verbose mode. Helpful for troubleshooting. " +
             "Multiple -v options increase the verbosity.")
     private boolean[] verbose = new boolean[0];
 
@@ -111,7 +115,8 @@ public class STCli implements Runnable {
 
     // TODO: add option to define output file suffix matching [^-_.A-Za-z0-9]
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
+        System.setProperty("org.eclipse.jetty.util.log.announce", "false"); // disable annoying Jetty logging printout to console
         classLogger.trace(stringsCli.getString("log4jMainTraceStart"));
         CommandLine.run(new STCli(), System.out, args);
         classLogger.trace(stringsCli.getString("log4jMainTraceEnd"));
@@ -153,7 +158,8 @@ public class STCli implements Runnable {
 
     private void validateParameters() {
         try {
-            STValidate.validateFiles((File[]) this.configInstance.getConfiguration().getArray(File.class, STConfigurationOverlay.API_FILES.getKey()));
+            //STValidate.validateFiles((File[]) this.configInstance.getConfiguration().getArray(File.class, STConfigurationOverlay.API_FILES.getKey()));
+            STValidate.validateFiles(inputFiles);
         } catch (STValidationException e) {
             classLogger.debug(stringsCli.getString("StvValidationDebugValidationException"));
             classLogger.debug(e.getMessage() + e.getOptionOrParameter(), e);
@@ -172,78 +178,120 @@ public class STCli implements Runnable {
         configuration.addProperty(STConfigurationOverlay.API_FROM.getKey(), from);
         //configuration.addProperty(STConfigurationOverlay.API_FILES.getKey(), inputFiles);
         // add other options
-        if(verbose.length != 0) configuration.addProperty("settings.cli.verbosity", verbose);
+        if (verbose.length != 0) configuration.addProperty("settings.cli.verbosity", verbose);
         //overlay other options
-        if(!StringUtils.isAllBlank(subscriptionKey)) configuration.setProperty(STConfigurationDefault.API_KEY.getKey(), subscriptionKey);
-        if(!StringUtils.isBlank(audio)) configuration.setProperty(STConfigurationDefault.API_AUDIO.getKey(), audio);
-        if(!StringUtils.isBlank(features)) configuration.setProperty(STConfigurationDefault.API_FEATURES.getKey(), features);
-        if(!StringUtils.isBlank(profanityAction)) configuration.setProperty(STConfigurationDefault.API_PROFANITY_ACTION.getKey(), profanityAction);
-        if(!StringUtils.isBlank(profanityMarker)) configuration.setProperty(STConfigurationDefault.API_PROFANITY_MARKER.getKey(), profanityMarker);
-        if(!StringUtils.isBlank(voice)) configuration.setProperty(STConfigurationDefault.API_VOICE.getKey(), voice);
-        if(configuration.getString(STConfigurationDefault.CLI_OMIT_TEXT.getKey()).isEmpty()) {
+        if (!StringUtils.isAllBlank(subscriptionKey))
+            configuration.setProperty(STConfigurationDefault.API_KEY.getKey(), subscriptionKey);
+        if (!StringUtils.isBlank(audio)) configuration.setProperty(STConfigurationDefault.API_AUDIO.getKey(), audio);
+        if (!StringUtils.isBlank(features))
+            configuration.setProperty(STConfigurationDefault.API_FEATURES.getKey(), features);
+        if (!StringUtils.isBlank(profanityAction))
+            configuration.setProperty(STConfigurationDefault.API_PROFANITY_ACTION.getKey(), profanityAction);
+        if (!StringUtils.isBlank(profanityMarker))
+            configuration.setProperty(STConfigurationDefault.API_PROFANITY_MARKER.getKey(), profanityMarker);
+        if (!StringUtils.isBlank(voice)) configuration.setProperty(STConfigurationDefault.API_VOICE.getKey(), voice);
+        if (configuration.getString(STConfigurationDefault.CLI_OMIT_TEXT.getKey()).isEmpty()) {
             configuration.setProperty(STConfigurationDefault.CLI_OMIT_TEXT.getKey(), omitTextFiles);
         }
-        if(configuration.getString(STConfigurationDefault.CLI_OUTPUT_DIR.getKey()).isEmpty() && outputLocation != null && !outputLocation.getAbsolutePath().isEmpty()) {
+        if (configuration.getString(STConfigurationDefault.CLI_OUTPUT_DIR.getKey()).isEmpty() && outputLocation != null && !outputLocation.getAbsolutePath().isEmpty()) {
             configuration.setProperty(STConfigurationDefault.CLI_OUTPUT_DIR.getKey(), outputLocation.getAbsolutePath());
         } else {
             configuration.setProperty(STConfigurationDefault.CLI_OUTPUT_DIR.getKey(), configInstance.getCurrentWorkingDirectory());
         }
-        if(!StringUtils.isBlank(postfix)) configuration.setProperty(STConfigurationDefault.CLI_POSTFIX.getKey(), postfix);
+        if (!StringUtils.isBlank(postfix))
+            configuration.setProperty(STConfigurationDefault.CLI_POSTFIX.getKey(), postfix);
     }
 
     // one file at a time in this one...
     private void communicateSequentially() {
-        for (File f: inputFiles) {
+        for (File f : inputFiles) {
             WebSocketClient client = new WebSocketClient();
             SpeechClientSocket socket = new SpeechClientSocket(f);
 
-            try
-            {
+            try {
                 client.start();
-
-                URI echoUri = new URI("");
                 ClientUpgradeRequest request = new ClientUpgradeRequest();
-                client.connect(socket,echoUri,request);
+                client.connect(socket, buildConnectionString(), request);
 
                 // wait for closed socket connection.
                 socket.awaitClose(5, TimeUnit.SECONDS);
-            }
-            catch (Throwable t)
-            {
-                t.printStackTrace();
-            }
-            finally
-            {
-                try
-                {
+            } catch (IOException i) {
+                classLogger.debug(stringsCli.getString("log4jStcSocketConnectError"), i);
+                classLogger.error(stringsCli.getString("log4jStcSocketConnectError"));
+                System.exit(STExitCode.CONNECTION_ERROR.getId());
+            } catch (InterruptedException e) {
+                classLogger.debug(stringsCli.getString("log4jStcSocketCloseException"), e);
+                classLogger.error(stringsCli.getString("log4jStcSocketCloseException"));
+                System.exit(STExitCode.CONNECTION_ERROR.getId());
+            } catch (Throwable t) {
+                classLogger.debug(stringsCli.getString("log4jStcInternalError"), t);
+                classLogger.error(stringsCli.getString("log4jStcInternalError"));
+                System.exit(STExitCode.INTERNAL_ERROR.getId());
+            } finally {
+                try {
                     client.stop();
-                }
-                catch (Exception e)
-                {
-                    e.printStackTrace();
+                } catch (Exception e) {
+                    classLogger.debug(stringsCli.getString("log4jStcInternalError"), e);
+                    classLogger.error(stringsCli.getString("log4jStcInternalError"));
+                    System.exit(STExitCode.INTERNAL_ERROR.getId());
                 }
             }
-            
         }
     }
 
-/*    private Uri buildConnectionString() {
-        StringBuilder uriBuilder = new StringBuilder();
-        uriBuilder.append(configInstance.getConfiguration().getString(STConfigurationDefault.API_ENDPOINT.getKey()));
-        uriBuilder.append(configInstance.getConfiguration().getString(STConfigurationDefault.API_PATH.getKey()));
-        uriBuilder.append("?");
-        uriBuilder.append(configInstance.getConfiguration().getString(STConfigurationDefault.API_VERSION.getKey()));
-        uriBuilder.append("&");
-        uriBuilder.append(configInstance.getConfiguration().getString(STConfigurationOverlay.API_FROM.getKey()));
-        uriBuilder.append("&");
-        uriBuilder.append(configInstance.getConfiguration().getString(STConfigurationOverlay.API_TO.getKey()));
+    private URI buildConnectionString() {
+        try {
+            StringBuilder uriBuilder = new StringBuilder();
+            uriBuilder.append(configInstance.getConfiguration().getString(STConfigurationDefault.API_ENDPOINT.getKey()));
+            uriBuilder.append(configInstance.getConfiguration().getString(STConfigurationDefault.API_PATH.getKey()));
+            uriBuilder.append("?");
+            uriBuilder.append(configInstance.getConfiguration().getString(STConfigurationDefault.API_VERSION.getKey()));
+            uriBuilder.append("&from=");
+            uriBuilder.append(URLEncoder.encode(configInstance.getConfiguration().getString(STConfigurationOverlay.API_FROM.getKey()), "UTF-8"));
+            uriBuilder.append("&to=");
+            uriBuilder.append(URLEncoder.encode(configInstance.getConfiguration().getString(STConfigurationOverlay.API_TO.getKey()), "UTF-8"));
 
-        if () {
+            if (!configInstance.getConfiguration().getString(STConfigurationDefault.API_FEATURES.getKey()).isEmpty()) {
+                uriBuilder.append("&features=");
+                uriBuilder.append(URLEncoder.encode(configInstance.getConfiguration().getString(STConfigurationDefault.API_FEATURES.getKey()), "UTF-8"));
+            }
 
+            if (!configInstance.getConfiguration().getString(STConfigurationDefault.API_VOICE.getKey()).isEmpty()) {
+                uriBuilder.append("&voice=");
+                uriBuilder.append(URLEncoder.encode(configInstance.getConfiguration().getString(STConfigurationDefault.API_VOICE.getKey()), "UTF-8"));
+            }
+
+            if (!configInstance.getConfiguration().getString(STConfigurationDefault.API_AUDIO.getKey()).isEmpty()) {
+                uriBuilder.append("&format=");
+                uriBuilder.append(URLEncoder.encode(configInstance.getConfiguration().getString(STConfigurationDefault.API_AUDIO.getKey()), "UTF-8"));
+            }
+
+            if (!configInstance.getConfiguration().getString(STConfigurationDefault.API_PROFANITY_ACTION.getKey()).isEmpty()) {
+                uriBuilder.append("&ProfanityAction=");
+                uriBuilder.append(URLEncoder.encode(configInstance.getConfiguration().getString(STConfigurationDefault.API_PROFANITY_ACTION.getKey()), "UTF-8"));
+            }
+
+            if (!configInstance.getConfiguration().getString(STConfigurationDefault.API_PROFANITY_MARKER.getKey()).isEmpty()) {
+                uriBuilder.append("&ProfanityMarker=");
+                uriBuilder.append(URLEncoder.encode(configInstance.getConfiguration().getString(STConfigurationDefault.API_PROFANITY_MARKER.getKey()), "UTF-8"));
+            }
+
+            if (!configInstance.getConfiguration().getString(STConfigurationDefault.API_KEY.getKey()).isEmpty()) {
+                uriBuilder.append("&subscription-key=");
+                uriBuilder.append(URLEncoder.encode(configInstance.getConfiguration().getString(STConfigurationDefault.API_KEY.getKey()), "UTF-8"));
+            }
+
+            return new URI(uriBuilder.toString());
+        } catch (URISyntaxException e) {
+            classLogger.debug(stringsCli.getString("log4jStcInternalError"), e);
+            classLogger.error(stringsCli.getString("log4jStcInternalError"));
+            System.exit(STExitCode.INTERNAL_ERROR.getId());
+            return null; // never reached, got to satisfy the compiler
+        } catch (UnsupportedEncodingException u) {
+            classLogger.debug(stringsCli.getString("log4jStcInternalError"), u);
+            classLogger.error(stringsCli.getString("log4jStcInternalError"));
+            System.exit(STExitCode.INTERNAL_ERROR.getId());
+            return null; // never reached, got to satisfy the compiler
         }
-
-        uriBuilder.append("&");
-        uriBuilder.append(configInstance.getConfiguration().getString(STConfigurationDefault.API_FEATURES.getKey()));
-
-    }*/
+    }
 }

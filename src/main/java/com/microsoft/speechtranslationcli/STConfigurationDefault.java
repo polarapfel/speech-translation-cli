@@ -45,7 +45,7 @@ public enum STConfigurationDefault {
     WEBSOCKET_MAX_BINARY_MSG("settings.websocket.maxbinary", "262144"), // 64 * 4096
     WEBSOCKET_MAX_TEXT_MSG("settings.websocket.maxtext", "65536"), // 64 * 1024
     WEBSOCKET_BUFFER("settings.websocket.buffer", "65536"),
-    WEBSOCKET_MAX_IDLE("settings.websocket.maxidletime", "60"),
+    WEBSOCKET_MAX_IDLE("settings.websocket.maxidletime", "600"),
     CLI_POSTFIX("settings.cli.postfix", ".translation"),
     CLI_OUTPUT_DIR("settings.cli.outputdir", ""),
     CLI_OMIT_TEXT("settings.cli.omittext", "");
